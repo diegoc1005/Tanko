@@ -1,0 +1,117 @@
+import {
+  Keypair,
+  Transaction,
+  Networks,
+  StrKey,
+  Horizon,
+} from 'stellar-sdk';
+import { config } from '../config/index.js';
+
+const { HORIZON_URL } = {
+  HORIZON_URL: config.stellar.horizonUrl,
+};
+
+interface BalanceInfo {
+  asset: string;
+  balance: string;
+}
+
+interface AccountInfo {
+  publicKey: string;
+  sequence: string;
+  balances: BalanceInfo[];
+}
+
+interface BalanceLine {
+  asset_type: string;
+  balance: string;
+  asset_code?: string;
+}
+
+export class StellarService {
+  private horizonServer: Horizon.Server;
+
+  constructor() {
+    this.horizonServer = new Horizon.Server(HORIZON_URL);
+  }
+
+  validatePublicKey(publicKey: string): boolean {
+    try {
+      return StrKey.isValidEd25519PublicKey(publicKey);
+    } catch {
+      return false;
+    }
+  }
+
+  validateSecretKey(secretKey: string): boolean {
+    try {
+      const keypair = Keypair.fromSecret(secretKey);
+      return StrKey.isValidEd25519PublicKey(keypair.publicKey());
+    } catch {
+      return false;
+    }
+  }
+
+  generateKeypair(): { publicKey: string; secret: string } {
+    const keypair = Keypair.random();
+    return {
+      publicKey: keypair.publicKey(),
+      secret: keypair.secret(),
+    };
+  }
+
+  getKeypairFromSecret(secret: string): Keypair {
+    return Keypair.fromSecret(secret);
+  }
+
+  signTransaction(xdr: string, secret: string): string {
+    const transaction = new Transaction(xdr, Networks.TESTNET);
+    const keypair = this.getKeypairFromSecret(secret);
+    transaction.sign(keypair);
+    return transaction.toXDR();
+  }
+
+  async submitTransaction(signedXdr: string): Promise<{ hash: string }> {
+    const transaction = new Transaction(signedXdr, Networks.TESTNET);
+    const response = await this.horizonServer.submitTransaction(transaction);
+    return { hash: response.hash };
+  }
+
+  async getAccountBalance(publicKey: string): Promise<BalanceInfo[]> {
+    try {
+      const account = await this.horizonServer.loadAccount(publicKey);
+      return account.balances.map((balance: BalanceLine) => ({
+        asset: balance.asset_type === 'native' ? 'XLM' : (balance.asset_code || 'unknown'),
+        balance: balance.balance,
+      }));
+    } catch (error) {
+      throw new Error(`Failed to fetch account balance: ${error}`);
+    }
+  }
+
+  async getAccountInfo(publicKey: string): Promise<AccountInfo> {
+    try {
+      const account = await this.horizonServer.loadAccount(publicKey);
+      return {
+        publicKey,
+        sequence: account.sequenceNumber(),
+        balances: account.balances.map((balance: BalanceLine) => ({
+          asset: balance.asset_type === 'native' ? 'XLM' : (balance.asset_code || 'unknown'),
+          balance: balance.balance,
+        })),
+      };
+    } catch (error) {
+      throw new Error(`Failed to fetch account info: ${error}`);
+    }
+  }
+
+  getNetworkPassphrase(): string {
+    return Networks.TESTNET;
+  }
+
+  isTestnet(): boolean {
+    return config.stellar.network === 'testnet';
+  }
+}
+
+export const stellarService = new StellarService();
