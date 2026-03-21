@@ -1,9 +1,9 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { 
-  Fuel, 
   LayoutDashboard, 
   Users, 
   Car, 
@@ -15,7 +15,6 @@ import {
   X,
   Truck,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { useState } from "react"
 
 const navigation = [
@@ -40,31 +39,42 @@ export default function DashboardLayout({
       {/* Mobile sidebar backdrop */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-card transition-transform lg:translate-x-0 ${
-        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-      }`}>
-        <div className="flex h-16 items-center justify-between border-b border-border px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Fuel className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-bold text-foreground">FuelWallet</span>
+      {/* Sidebar — TANKO navy */}
+      <aside
+        style={{ backgroundColor: "#1B2D4F" }}
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col transition-transform lg:translate-x-0 ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* Brand */}
+        <div
+          style={{ borderBottomColor: "rgba(255,255,255,0.08)" }}
+          className="flex h-16 items-center justify-between border-b px-5"
+        >
+          <Link href="/" className="flex items-center gap-2.5">
+            <Image
+              src="/tanko-logo.png"
+              alt="TANKO"
+              width={36}
+              height={36}
+              className="object-contain"
+            />
+            <span className="text-xl font-black tracking-widest text-white">
+              TANKO
+            </span>
           </Link>
-          <button
-            className="lg:hidden"
-            onClick={() => setIsSidebarOpen(false)}
-          >
-            <X className="h-5 w-5 text-muted-foreground" />
+          <button className="lg:hidden" onClick={() => setIsSidebarOpen(false)}>
+            <X className="h-5 w-5 text-white/50" />
           </button>
         </div>
 
-        <nav className="flex-1 space-y-1 p-4">
+        {/* Nav */}
+        <nav className="flex-1 space-y-0.5 p-3 pt-4">
           {navigation.map((item) => {
             const isActive = pathname === item.href
             return (
@@ -72,30 +82,35 @@ export default function DashboardLayout({
                 key={item.name}
                 href={item.href}
                 onClick={() => setIsSidebarOpen(false)}
+                style={isActive ? { backgroundColor: "#F58220" } : undefined}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "text-white shadow-md"
+                    : "text-white/60 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                <item.icon className="h-5 w-5" />
+                <item.icon className="h-5 w-5 shrink-0" />
                 {item.name}
               </Link>
             )
           })}
         </nav>
 
-        <div className="border-t border-border p-4">
+        {/* Bottom links */}
+        <div
+          style={{ borderTopColor: "rgba(255,255,255,0.08)" }}
+          className="border-t p-3 space-y-0.5"
+        >
           <Link
             href="/dashboard/configuracion"
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/60 hover:bg-white/10 hover:text-white transition-colors"
           >
             <Settings className="h-5 w-5" />
             Configuración
           </Link>
           <Link
             href="/"
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/60 hover:bg-white/10 hover:text-white transition-colors"
           >
             <LogOut className="h-5 w-5" />
             Cerrar Sesión
@@ -117,10 +132,13 @@ export default function DashboardLayout({
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="text-sm font-medium text-foreground">Admin Usuario</p>
-              <p className="text-xs text-muted-foreground">admin@fuelwallet.mx</p>
+              <p className="text-xs text-muted-foreground">admin@tanko.mx</p>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
-              <span className="text-sm font-medium">AU</span>
+            <div
+              style={{ backgroundColor: "#F58220" }}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-white"
+            >
+              <span className="text-sm font-bold">AU</span>
             </div>
           </div>
         </header>
