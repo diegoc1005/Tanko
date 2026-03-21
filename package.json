@@ -1,0 +1,27 @@
+{
+  "name": "tanko-monorepo",
+  "version": "1.0.0",
+  "description": "Tanko – Sistema B2B de gestión descentralizada de combustible con Trustless Work / Stellar",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"magenta,cyan\" \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspace=frontend",
+    "install:all": "npm install",
+    "lint": "npm run lint --workspace=frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "author": "Equipo Alebrije – Hack+ CDMX 2026",
+  "license": "MIT"
+}
