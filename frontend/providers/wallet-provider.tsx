@@ -1,134 +1,137 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { StellarWalletsKit, Networks } from '@creit.tech/stellar-wallets-kit'
-import { FreighterModule } from '@creit.tech/stellar-wallets-kit/modules/freighter'
 
 interface WalletState {
   address: string | null
   isConnected: boolean
   isConnecting: boolean
-  publicKey: string | null
   error: string | null
-  network: string
+  freighterInstalled: boolean
 }
 
 interface WalletContextType extends WalletState {
   connect: () => Promise<void>
   disconnect: () => void
-  switchNetwork: (network: 'testnet' | 'public') => void
-  fetchAddress: () => Promise<string | null>
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined)
-
-const freighterModule = new FreighterModule()
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<WalletState>({
     address: null,
     isConnected: false,
     isConnecting: false,
-    publicKey: null,
     error: null,
-    network: 'testnet',
+    freighterInstalled: false,
   })
 
+  // On mount: check extension + restore previous session
   useEffect(() => {
-    initializeKit()
-    checkExistingConnection()
-  }, [])
+    async function restore() {
+      try {
+        // Dynamic import keeps this browser-only code out of SSR
+        const freighter = await import('@stellar/freighter-api')
 
-  const initializeKit = () => {
-    try {
-      StellarWalletsKit.init({
-        modules: [freighterModule],
-        selectedWalletId: 'freighter',
-        network: Networks.TESTNET,
-      })
-    } catch (error) {
-      console.error('Error initializing kit:', error)
-    }
-  }
+        const { isConnected } = await freighter.isConnected()
+        if (!isConnected) {
+          // Extension not installed — still restore address from localStorage
+          // so the UI can show a "reconnect" prompt
+          const stored = localStorage.getItem('stellar_address')
+          if (stored) {
+            setState(prev => ({ ...prev, address: stored, isConnected: true, freighterInstalled: false }))
+          }
+          return
+        }
 
-  const checkExistingConnection = async () => {
-    try {
-      const storedAddress = localStorage.getItem('stellar_address')
-      if (storedAddress) {
-        setState(prev => ({
-          ...prev,
-          address: storedAddress,
-          publicKey: storedAddress,
-          isConnected: true,
-        }))
+        setState(prev => ({ ...prev, freighterInstalled: true }))
+
+        // If the site is already allowed, restore the session silently
+        const { isAllowed } = await freighter.isAllowed()
+        if (isAllowed) {
+          const { address, error } = await freighter.getAddress()
+          if (!error && address) {
+            localStorage.setItem('stellar_address', address)
+            setState({ address, isConnected: true, isConnecting: false, error: null, freighterInstalled: true })
+          }
+        } else {
+          // Check localStorage fallback
+          const stored = localStorage.getItem('stellar_address')
+          if (stored) {
+            setState(prev => ({ ...prev, address: stored, isConnected: true, freighterInstalled: true }))
+          }
+        }
+      } catch (err) {
+        console.error('[Tanko] Freighter init error:', err)
       }
-    } catch (error) {
-      console.error('Error checking connection:', error)
     }
-  }
 
-  const fetchAddress = async (): Promise<string | null> => {
-    try {
-      const result = await StellarWalletsKit.getAddress()
-      return result.address
-    } catch {
-      return null
-    }
-  }
+    restore()
+  }, [])
 
   const connect = async () => {
     setState(prev => ({ ...prev, isConnecting: true, error: null }))
-    
     try {
-      const result = await StellarWalletsKit.authModal()
-      
-      if (result?.address) {
-        localStorage.setItem('stellar_address', result.address)
+      const freighter = await import('@stellar/freighter-api')
+
+      // Check if extension is installed
+      const { isConnected } = await freighter.isConnected()
+      if (!isConnected) {
+        setState(prev => ({
+          ...prev,
+          isConnecting: false,
+          freighterInstalled: false,
+          error: 'Freighter no está instalado. Instálalo en freighter.app y recarga la página.',
+        }))
+        return
+      }
+
+      // requestAccess() is what actually opens the Freighter extension popup
+      const { address, error } = await freighter.requestAccess()
+
+      if (error) {
+        setState(prev => ({
+          ...prev,
+          isConnecting: false,
+          error: `Freighter rechazó el acceso: ${error}`,
+        }))
+        return
+      }
+
+      if (address) {
+        localStorage.setItem('stellar_address', address)
         setState({
-          address: result.address,
-          publicKey: result.address,
+          address,
           isConnected: true,
           isConnecting: false,
           error: null,
-          network: 'testnet',
+          freighterInstalled: true,
         })
+        console.log(`[Tanko] ✅ Freighter conectado: ${address}`)
       }
-    } catch (error: any) {
-      console.error('Error connecting wallet:', error)
+    } catch (err: any) {
       setState(prev => ({
         ...prev,
         isConnecting: false,
-        error: error.message || 'Error al conectar wallet',
+        error: err?.message || 'Error al conectar. Verifica que Freighter esté desbloqueado.',
       }))
     }
   }
 
   const disconnect = () => {
-    try {
-      StellarWalletsKit.disconnectWallet()
-    } catch (error) {
-      console.error('Error disconnecting:', error)
-    }
-    
     localStorage.removeItem('stellar_address')
-    setState({
+    setState(prev => ({
+      ...prev,
       address: null,
       isConnected: false,
       isConnecting: false,
-      publicKey: null,
       error: null,
-      network: 'testnet',
-    })
-  }
-
-  const switchNetwork = (network: 'testnet' | 'public') => {
-    const networkValue = network === 'testnet' ? Networks.TESTNET : Networks.PUBLIC
-    StellarWalletsKit.setNetwork(networkValue)
-    setState(prev => ({ ...prev, network }))
+    }))
+    console.log('[Tanko] Wallet desconectada')
   }
 
   return (
-    <WalletContext.Provider value={{ ...state, connect, disconnect, switchNetwork, fetchAddress }}>
+    <WalletContext.Provider value={{ ...state, connect, disconnect }}>
       {children}
     </WalletContext.Provider>
   )
@@ -136,8 +139,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
 export function useWallet() {
   const context = useContext(WalletContext)
-  if (context === undefined) {
-    throw new Error('useWallet must be used within a WalletProvider')
-  }
+  if (!context) throw new Error('useWallet must be used within a WalletProvider')
   return context
 }

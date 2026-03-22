@@ -16,6 +16,7 @@ import {
   Truck,
 } from "lucide-react"
 import { useState } from "react"
+import { WalletButton } from "@/components/wallet/wallet-button"
 
 const navigation = [
   { name: "Resumen", href: "/dashboard", icon: LayoutDashboard },
@@ -129,18 +130,7 @@ export default function DashboardLayout({
             <Menu className="h-6 w-6" />
           </button>
           <div className="flex-1" />
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-sm font-medium text-foreground">Admin Usuario</p>
-              <p className="text-xs text-muted-foreground">admin@tanko.mx</p>
-            </div>
-            <div
-              style={{ backgroundColor: "#F58220" }}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-white"
-            >
-              <span className="text-sm font-bold">AU</span>
-            </div>
-          </div>
+          <WalletButton />
         </header>
 
         {/* Page content */}

@@ -159,7 +159,7 @@ export default function ConductorWalletPage() {
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
               <Fuel className="h-5 w-5 text-white" />
             </div>
-            <span className="text-sm font-semibold tracking-wide text-white/80">FuelWallet</span>
+            <span className="text-sm font-semibold tracking-wide text-white/80">TANKO</span>
           </div>
           <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/80 backdrop-blur-sm">
             Testnet · Stellar

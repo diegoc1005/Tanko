@@ -11,7 +11,7 @@ export function Footer() {
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
                 <Fuel className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="text-xl font-bold text-foreground">FuelWallet</span>
+              <span className="text-xl font-bold text-foreground">TANKO</span>
             </Link>
             <p className="mt-4 text-sm text-muted-foreground">
               Plataforma líder en monederos electrónicos para combustibles. Comisiones bajas, registro rápido y la red de estaciones más grande del país.
@@ -70,7 +70,7 @@ export function Footer() {
             <ul className="mt-4 space-y-3">
               <li className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Mail className="h-4 w-4" />
-                soporte@fuelwallet.mx
+                soporte@tanko.mx
               </li>
               <li className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Phone className="h-4 w-4" />
@@ -86,7 +86,7 @@ export function Footer() {
 
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border pt-8 md:flex-row">
           <p className="text-sm text-muted-foreground">
-            2026 FuelWallet. Todos los derechos reservados.
+            2026 TANKO. Todos los derechos reservados.
           </p>
           <div className="flex items-center gap-6">
             <span className="text-xs text-muted-foreground">

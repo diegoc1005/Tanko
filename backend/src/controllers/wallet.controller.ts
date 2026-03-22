@@ -18,6 +18,61 @@ export class WalletController {
     }
   }
 
+  /**
+   * POST /api/v1/wallet/connect
+   * Called by the frontend immediately after a successful wallet connection.
+   * Validates the public key and logs the session to the terminal — useful
+   * for demos and debugging.
+   */
+  async connectWallet(req: Request, res: Response): Promise<void> {
+    try {
+      const { publicKey, walletType } = req.body as {
+        publicKey?: string;
+        walletType?: string;
+      };
+
+      if (!publicKey || typeof publicKey !== 'string') {
+        res.status(400).json({ success: false, error: 'publicKey is required' });
+        return;
+      }
+
+      if (!stellarService.validatePublicKey(publicKey)) {
+        res.status(400).json({ success: false, error: 'Invalid Stellar public key' });
+        return;
+      }
+
+      const label = walletType === 'walletconnect' ? 'Decaf (WalletConnect)' : (walletType ?? 'unknown');
+
+      console.log('\n┌─────────────────────────────────────────────────────┐');
+      console.log(`│  🟢 WALLET CONNECTED via ${label.padEnd(26)}│`);
+      console.log(`│  Key: ${publicKey.slice(0, 20)}...${publicKey.slice(-8).padEnd(20)}│`);
+      console.log('└─────────────────────────────────────────────────────┘\n');
+
+      // Optionally fetch live Stellar account info
+      let accountInfo: any = null;
+      try {
+        accountInfo = await stellarService.getAccountInfo(publicKey);
+      } catch {
+        // Account may not be funded yet on testnet — that's fine
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          publicKey,
+          walletType: walletType ?? 'unknown',
+          accountInfo,
+          connectedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Connection validation failed',
+      });
+    }
+  }
+
   async getAccountInfo(req: Request, res: Response): Promise<void> {
     try {
       const { publicKey } = req.params;
