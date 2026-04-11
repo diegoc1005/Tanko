@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useWallet } from '@/providers/wallet-provider'
+import { useAuth } from '@/providers/auth-provider'
 import { Wallet, ChevronDown, LogOut, Copy, CheckCheck, Loader2, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -11,7 +11,7 @@ interface WalletButtonProps {
 }
 
 export function WalletButton({ className }: WalletButtonProps) {
-  const { isConnected, isConnecting, address, connect, disconnect, error } = useWallet()
+  const { isConnected, isConnecting, address, connect, disconnect, error } = useAuth()
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)

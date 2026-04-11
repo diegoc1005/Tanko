@@ -1,58 +1,36 @@
 import { Request, Response } from 'express';
-import { fundsService } from '../services/funds.service.js';
+import { fundsService, CreateFundRequestInput, ApproveFundRequestInput, ReleaseFundsInput, RejectFundRequestInput } from '../services/funds.service.js';
 import { stellarService } from '../services/stellar.service.js';
-import { z } from 'zod';
-
-const createRequestSchema = z.object({
-  driverPublicKey: z.string().min(1),
-  amount: z.string().min(1),
-  description: z.string().min(1),
-});
-
-const approveRequestSchema = z.object({
-  requestId: z.string().uuid(),
-  managerSecret: z.string().min(1),
-  createNewEscrow: z.boolean().optional().default(true),
-});
-
-const rejectRequestSchema = z.object({
-  requestId: z.string().uuid(),
-  reason: z.string().optional(),
-});
 
 export class FundsController {
   async createRequest(req: Request, res: Response): Promise<void> {
     try {
-      const { managerPublicKey } = req.body;
+      const { driverPubKey, managerPubKey, liters, amount, description } = req.body;
 
-      if (!managerPublicKey || typeof managerPublicKey !== 'string') {
-        res.status(400).json({ success: false, error: 'managerPublicKey is required' });
+      if (!driverPubKey || !managerPubKey || !liters || !amount) {
+        res.status(400).json({ success: false, error: 'driverPubKey, managerPubKey, liters, and amount are required' });
         return;
       }
 
-      if (!stellarService.validatePublicKey(managerPublicKey)) {
+      if (!stellarService.validatePublicKey(driverPubKey)) {
+        res.status(400).json({ success: false, error: 'Invalid driver public key' });
+        return;
+      }
+
+      if (!stellarService.validatePublicKey(managerPubKey)) {
         res.status(400).json({ success: false, error: 'Invalid manager public key' });
         return;
       }
 
-      const validation = createRequestSchema.safeParse(req.body);
-      if (!validation.success) {
-        res.status(400).json({
-          success: false,
-          error: 'Validation failed',
-          details: validation.error.errors,
-        });
-        return;
-      }
+      const input: CreateFundRequestInput = {
+        driverPubKey,
+        managerPubKey,
+        liters: parseFloat(liters),
+        amount: parseFloat(amount),
+        description,
+      };
 
-      const result = await fundsService.createRequest(
-        validation.data.driverPublicKey,
-        {
-          amount: validation.data.amount,
-          description: validation.data.description,
-        },
-        managerPublicKey
-      );
+      const result = await fundsService.createRequest(input);
 
       if (result.success) {
         res.status(201).json(result);
@@ -62,43 +40,27 @@ export class FundsController {
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: error instanceof Error ? error.message : 'Failed to create fund request',
       });
     }
   }
 
   async approveRequest(req: Request, res: Response): Promise<void> {
     try {
-      const { managerPublicKey } = req.body;
+      const { requestId, managerSecret, managerPubKey } = req.body;
 
-      if (!managerPublicKey || typeof managerPublicKey !== 'string') {
-        res.status(400).json({ success: false, error: 'managerPublicKey is required' });
+      if (!requestId || !managerSecret || !managerPubKey) {
+        res.status(400).json({ success: false, error: 'requestId, managerSecret, and managerPubKey are required' });
         return;
       }
 
-      if (!stellarService.validatePublicKey(managerPublicKey)) {
+      if (!stellarService.validatePublicKey(managerPubKey)) {
         res.status(400).json({ success: false, error: 'Invalid manager public key' });
         return;
       }
 
-      const validation = approveRequestSchema.safeParse(req.body);
-      if (!validation.success) {
-        res.status(400).json({
-          success: false,
-          error: 'Validation failed',
-          details: validation.error.errors,
-        });
-        return;
-      }
-
-      const result = await fundsService.approveRequest(
-        {
-          requestId: validation.data.requestId,
-          managerSecret: validation.data.managerSecret,
-          createNewEscrow: validation.data.createNewEscrow,
-        },
-        managerPublicKey
-      );
+      const input: ApproveFundRequestInput = { requestId, managerSecret };
+      const result = await fundsService.approveRequest(input, managerPubKey);
 
       if (result.success) {
         res.status(200).json(result);
@@ -108,75 +70,57 @@ export class FundsController {
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: error instanceof Error ? error.message : 'Failed to approve fund request',
       });
     }
   }
 
   async releaseFunds(req: Request, res: Response): Promise<void> {
     try {
-      const { requestId, managerSecret, managerPublicKey } = req.body;
+      const { requestId, managerSecret, managerPubKey } = req.body;
 
-      if (!requestId || !managerSecret || !managerPublicKey) {
-        res.status(400).json({ success: false, error: 'requestId, managerSecret, and managerPublicKey are required' });
+      if (!requestId || !managerSecret || !managerPubKey) {
+        res.status(400).json({ success: false, error: 'requestId, managerSecret, and managerPubKey are required' });
         return;
       }
 
-      if (!stellarService.validatePublicKey(managerPublicKey)) {
+      if (!stellarService.validatePublicKey(managerPubKey)) {
         res.status(400).json({ success: false, error: 'Invalid manager public key' });
         return;
       }
 
-      const result = await fundsService.releaseFunds(requestId, managerSecret, managerPublicKey);
+      const input: ReleaseFundsInput = { requestId, managerSecret, managerPubKey };
+      const result = await fundsService.releaseFunds(input);
 
       if (result.success) {
-        res.status(200).json({
-          success: true,
-          data: { txHash: result.txHash },
-          message: 'Funds released successfully',
-        });
+        res.status(200).json({ success: true, txHash: result.txHash });
       } else {
-        res.status(400).json({ success: false, error: result.error });
+        res.status(400).json(result);
       }
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: error instanceof Error ? error.message : 'Failed to release funds',
       });
     }
   }
 
   async rejectRequest(req: Request, res: Response): Promise<void> {
     try {
-      const { managerPublicKey } = req.body;
+      const { requestId, managerPubKey } = req.body;
 
-      if (!managerPublicKey || typeof managerPublicKey !== 'string') {
-        res.status(400).json({ success: false, error: 'managerPublicKey is required' });
+      if (!requestId || !managerPubKey) {
+        res.status(400).json({ success: false, error: 'requestId and managerPubKey are required' });
         return;
       }
 
-      if (!stellarService.validatePublicKey(managerPublicKey)) {
+      if (!stellarService.validatePublicKey(managerPubKey)) {
         res.status(400).json({ success: false, error: 'Invalid manager public key' });
         return;
       }
 
-      const validation = rejectRequestSchema.safeParse(req.body);
-      if (!validation.success) {
-        res.status(400).json({
-          success: false,
-          error: 'Validation failed',
-          details: validation.error.errors,
-        });
-        return;
-      }
-
-      const result = fundsService.rejectRequest(
-        {
-          requestId: validation.data.requestId,
-          reason: validation.data.reason,
-        },
-        managerPublicKey
-      );
+      const input: RejectFundRequestInput = { requestId };
+      const result = await fundsService.rejectRequest(input, managerPubKey);
 
       if (result.success) {
         res.status(200).json(result);
@@ -186,21 +130,14 @@ export class FundsController {
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: error instanceof Error ? error.message : 'Failed to reject fund request',
       });
     }
   }
 
   async getRequest(req: Request, res: Response): Promise<void> {
     try {
-      const { id } = req.params;
-
-      if (!id) {
-        res.status(400).json({ success: false, error: 'Request ID is required' });
-        return;
-      }
-
-      const result = fundsService.getRequest(id);
+      const result = await fundsService.getRequest(req.params.id);
 
       if (result.success) {
         res.status(200).json(result);
@@ -210,57 +147,55 @@ export class FundsController {
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: error instanceof Error ? error.message : 'Failed to fetch fund request',
       });
     }
   }
 
   async getPendingRequests(req: Request, res: Response): Promise<void> {
     try {
-      const { managerPublicKey } = req.query;
+      const managerPubKey = req.query.managerPubKey as string;
 
-      if (typeof managerPublicKey !== 'string') {
-        res.status(400).json({ success: false, error: 'managerPublicKey query parameter is required' });
+      if (!managerPubKey) {
+        res.status(400).json({ success: false, error: 'managerPubKey is required' });
         return;
       }
 
-      if (!stellarService.validatePublicKey(managerPublicKey)) {
+      if (!stellarService.validatePublicKey(managerPubKey)) {
         res.status(400).json({ success: false, error: 'Invalid manager public key' });
         return;
       }
 
-      const result = fundsService.getPendingRequests(managerPublicKey);
-
+      const result = await fundsService.getPendingRequests(managerPubKey);
       res.status(200).json(result);
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: error instanceof Error ? error.message : 'Failed to fetch pending requests',
       });
     }
   }
 
   async getRequestsByDriver(req: Request, res: Response): Promise<void> {
     try {
-      const { publicKey } = req.params;
+      const driverPubKey = req.params.driverPubKey;
 
-      if (!publicKey) {
-        res.status(400).json({ success: false, error: 'Public key is required' });
+      if (!driverPubKey) {
+        res.status(400).json({ success: false, error: 'driverPubKey is required' });
         return;
       }
 
-      if (!stellarService.validatePublicKey(publicKey)) {
-        res.status(400).json({ success: false, error: 'Invalid public key' });
+      if (!stellarService.validatePublicKey(driverPubKey)) {
+        res.status(400).json({ success: false, error: 'Invalid driver public key' });
         return;
       }
 
-      const result = fundsService.getRequestsByDriver(publicKey);
-
+      const result = await fundsService.getRequestsByDriver(driverPubKey);
       res.status(200).json(result);
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: error instanceof Error ? error.message : 'Failed to fetch driver requests',
       });
     }
   }
@@ -281,7 +216,7 @@ export class FundsController {
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: error instanceof Error ? error.message : 'Failed to create testnet account',
       });
     }
   }
@@ -290,7 +225,7 @@ export class FundsController {
     try {
       const { publicKey } = req.body;
 
-      if (!publicKey || typeof publicKey !== 'string') {
+      if (!publicKey) {
         res.status(400).json({ success: false, error: 'publicKey is required' });
         return;
       }
@@ -303,17 +238,14 @@ export class FundsController {
       const result = await fundsService.fundTestnetAccount(publicKey);
 
       if (result.success) {
-        res.status(200).json({
-          success: true,
-          message: 'Account funded with 10,000 XLM (testnet)',
-        });
+        res.status(200).json({ success: true, message: 'Account funded with 10,000 XLM (testnet)' });
       } else {
         res.status(400).json(result);
       }
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: error instanceof Error ? error.message : 'Failed to fund testnet account',
       });
     }
   }
@@ -323,7 +255,7 @@ export class FundsController {
       const { contractId } = req.params;
 
       if (!contractId) {
-        res.status(400).json({ success: false, error: 'Contract ID is required' });
+        res.status(400).json({ success: false, error: 'contractId is required' });
         return;
       }
 
@@ -337,7 +269,31 @@ export class FundsController {
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: error instanceof Error ? error.message : 'Failed to fetch escrow status',
+      });
+    }
+  }
+
+  async getEscrowConfig(req: Request, res: Response): Promise<void> {
+    try {
+      const result = await fundsService.getEscrowConfig();
+      res.status(200).json(result);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch escrow config',
+      });
+    }
+  }
+
+  async updateEscrowConfig(req: Request, res: Response): Promise<void> {
+    try {
+      const result = await fundsService.updateEscrowConfig(req.body);
+      res.status(200).json(result);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update escrow config',
       });
     }
   }

@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  phone         String?
+  stellarPubKey String? @unique
+  role          String    @default("CONDUCTOR")
+  status        String    @default("ACTIVE")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  units            Unit[]
+  driverRequests   FundRequest[] @relation("driver")
+  managerRequests FundRequest[] @relation("manager")
+  fuelLogs        FuelLog[]
+}
+
+model Unit {
+  id            String   @id @default(uuid())
+  make          String
+  model         String
+  year          Int
+  plates        String   @unique
+  specs         String?
+  permitNumber  String?
+  permitExpiry  DateTime?
+  monthlySpend  Float   @default(0)
+  status        String  @default("ACTIVE")
+  userId        String
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fuelLogs      FuelLog[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([plates])
+}
+
+model FuelLog {
+  id             String   @id @default(uuid())
+  date           DateTime
+  liters         Float
+  pricePerLiter  Float
+  amount         Float
+  fuelType       String   @default("Diesel")
+  station        String
+  stationAddress String?
+  coords         String?
+  escrowId       String?
+  escrowStatus   String?
+  unitId         String
+  unit           Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([unitId])
+  @@index([userId])
+  @@index([date])
+}
+
+model FundRequest {
+  id            String     @id @default(uuid())
+  liters        Float
+  amount        Float
+  description   String?
+  status        String     @default("PENDING")
+  contractId    String?
+  escrowXdr     String?
+  escrowTxHash  String?
+  driverPubKey  String
+  managerPubKey String
+  driver        User       @relation("driver", fields: [driverPubKey], references: [stellarPubKey], onDelete: Cascade)
+  manager       User       @relation("manager", fields: [managerPubKey], references: [stellarPubKey], onDelete: Cascade)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([driverPubKey])
+  @@index([managerPubKey])
+  @@index([status])
+}
+
+model EscrowConfig {
+  id          String   @id @default(uuid())
+  name        String   @default("default")
+  usdcAddress String   @default("CBIELTK6YBZJU5UP2WWQAUYO4SJ2HBMQEFMU7HHD32YBXE7MKU65XABZ")
+  decimals    Int      @default(7)
+  platformFee Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([name])
+}
+
+model EscrowMilestone {
+  id           String    @id @default(uuid())
+  escrowId     String    @unique
+  contractId   String
+  engagementId String
+  title        String
+  description  String?
+  amount       Float
+  status       String    @default("PENDING")
+  releasedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}

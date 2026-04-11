@@ -1,119 +1,197 @@
 # 🚛 Tanko — Decentralized Fuel Wallet for Transport Fleets
 
 > **Hack+ Alebrije CDMX 2026** — MVP Demo
-> B2B system for managing fleet fuel with smart-contract escrows on the Stellar blockchain via **Trustless Work**.
+> B2B system for managing fleet fuel with smart-contract escrows on the Stellar blockchain via **Trustless Work** and **Soroban Smart Contracts**.
 
 ---
 
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Monorepo Structure](#monorepo-structure)
-3. [Data Flow](#data-flow)
+2. [System Architecture](#system-architecture)
+3. [Monorepo Structure](#monorepo-structure)
 4. [Tech Stack](#tech-stack)
 5. [Installation](#installation)
 6. [Environment Variables](#environment-variables)
 7. [Running the App](#running-the-app)
-8. [Usage Guide (Demo)](#usage-guide-demo)
+8. [Usage Guide](#usage-guide)
 9. [Backend API Endpoints](#backend-api-endpoints)
-10. [File Structure](#file-structure)
-11. [Demo Notes](#demo-notes)
+10. [Smart Contract](#smart-contract)
+11. [Current Status](#current-status)
 
 ---
 
 ## Project Overview
 
-**Tanko** replaces the cash and cloneable corporate fuel cards used by transport companies to manage driver fuel consumption. Instead, it uses **smart-contract escrows** on the Stellar blockchain to ensure funds are only released when the fleet manager explicitly approves a real fuel load.
+**Tanko** replaces cash advances and corporate fuel cards with on-chain escrows. Fleet managers authorize funds, the blockchain holds them securely, and drivers receive payment only after the fuel load is confirmed.
 
 ### System Actors
 
-| Actor | Role | Main Screen |
-|---|---|---|
-| **Fleet Manager (Jefe)** | Creates and approves escrows | `/dashboard/consumos` |
-| **Driver (Conductor)** | Requests funds for a fuel load | `/dashboard/conductor` |
+| Actor | Role | Description |
+|-------|------|-------------|
+| **Fleet Manager (Jefe)** | JEFE | Creates escrows, approves/rejects fund requests, monitors fleet |
+| **Driver (Conductor)** | CONDUCTOR | Requests fuel funds, loads fuel, receives payment |
 
 ### Core Flow
 
 ```
-Fleet Manager                  Tanko Backend              Stellar Blockchain
-     │                              │                            │
-     ├─ Connect Freighter wallet ──▶│                            │
-     │                              │                            │
-     ├─ Create Escrow ─────────────▶│                            │
-     │                              ├─ POST /escrow/single/create▶│
-     │                              │◀─ unsigned XDR transaction ─┤
-     │◀─ unsignedXDR ───────────────┤                            │
-     │                              │                            │
-     ├─ Sign with Freighter ───────▶│ (browser extension popup)  │
-     │                              │                            │
-     ├─ Submit signed XDR ─────────▶│                            │
-     │                              ├─ Submit to Horizon ────────▶│
-     │◀─ confirmed tx hash ─────────┤◀─ confirmed ───────────────┤
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           TAN KO FLOW                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Driver                          Backend                      Stellar         │
+│    │                               │                            │            │
+│    ├─ Request funds ──────────────▶│                            │            │
+│    │                               │                            │            │
+│    │                               ├─ Soroban: verify driver ─▶│            │
+│    │                               │◀─ driver verified ──────────┤            │
+│    │                               │                            │            │
+│    │                               ├─ Trustless Work:          │            │
+│    │                               │   create escrow ──────────▶│            │
+│    │◀─ pending ────────────────────┤                            │            │
+│                                                                             │
+│  Manager                          Backend                      Stellar       │
+│    │                               │                            │            │
+│    ├─ Review pending ─────────────▶│                            │            │
+│    │◀─ pending list ───────────────┤                            │            │
+│    │                               │                            │            │
+│    ├─ Approve ─────────────────────▶│                            │            │
+│    │                               ├─ Trustless Work:           │            │
+│    │                               │   release escrow ─────────▶│            │
+│    │                               │◀─ funds released ───────────┤            │
+│    │◀─ approved ───────────────────┤                            │            │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## System Architecture
+
+### Authentication Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      LOGIN FLOW                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  User opens app                                              │
+│       │                                                      │
+│       ▼                                                      │
+│  ┌─────────────────┐                                        │
+│  │  /login         │  Connect wallet (Freighter)            │
+│  └────────┬────────┘                                        │
+│           │                                                  │
+│           ▼                                                  │
+│  ┌─────────────────┐                                        │
+│  │ Select Role     │  CONDUCTOR or JEFE                    │
+│  └────────┬────────┘                                        │
+│           │                                                  │
+│           ├───────────▶ /dashboard/conductor (Driver)        │
+│           │                                                  │
+│           └───────────▶ /dashboard (Manager)                 │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Protected Routes
+
+| Route | Access | Description |
+|-------|--------|-------------|
+| `/dashboard` | JEFE only | Fleet overview, pending approvals, stats |
+| `/dashboard/conductor` | CONDUCTOR only | Driver wallet, request funds |
+| `/dashboard/usuarios` | JEFE only | User management |
+| `/dashboard/unidades` | JEFE only | Fleet vehicles |
+| `/dashboard/consumos` | JEFE only | Fuel logs history |
+| `/dashboard/ubicaciones` | JEFE only | Gas station locations |
 
 ---
 
 ## Monorepo Structure
 
 ```
-Tanko_Workspace/
-├── .env                  ← shared environment variables (single source of truth)
-├── .gitignore
-├── package.json          ← npm workspaces root + "npm run dev" script
+Tanko/
+├── .env                      ← Environment variables
+├── .env.example              ← Template for .env
+├── promt.txt                 ← Smart contract specification
 ├── README.md
 │
-├── frontend/             ← Next.js 14 (App Router)
+├── frontend/                 ← Next.js 16 (App Router)
 │   ├── app/
-│   │   ├── page.tsx           ← Freighter connection screen
-│   │   ├── layout.tsx
-│   │   ├── providers.tsx
+│   │   ├── layout.tsx            ← Root layout
+│   │   ├── providers.tsx          ← AuthProvider (wallet context)
+│   │   ├── page.tsx              ← Landing/connect page
+│   │   ├── login/page.tsx        ← Login with wallet + role selection
+│   │   ├── logout/page.tsx       ← Logout handler
+│   │   ├── menu/page.tsx          ← Landing page with features
 │   │   └── dashboard/
-│   │       ├── layout.tsx          ← sidebar + wallet chip
-│   │       ├── page.tsx            ← overview + charts
-│   │       ├── consumos/page.tsx   ← fuel logs + Create Escrow button
-│   │       ├── conductor/page.tsx  ← driver virtual wallet
-│   │       ├── unidades/page.tsx   ← fleet vehicles
-│   │       └── usuarios/page.tsx   ← user management
+│   │       ├── layout.tsx             ← Sidebar + protected routes
+│   │       ├── page.tsx               ← Fleet Manager dashboard
+│   │       ├── conductor/page.tsx      ← Driver wallet
+│   │       ├── usuarios/page.tsx       ← Users management
+│   │       ├── unidades/page.tsx       ← Fleet vehicles
+│   │       ├── consumos/page.tsx      ← Fuel logs
+│   │       └── ubicaciones/page.tsx   ← Gas stations
+│   │
 │   ├── components/
-│   │   ├── ui/            ← shadcn/ui components
-│   │   └── wallet/
-│   │       └── wallet-button.tsx   ← dApp wallet chip
-│   ├── providers/
-│   │   └── wallet-provider.tsx     ← Freighter context
-│   └── public/
-│       └── tanko-logo.png
+│   │   ├── ui/                ← shadcn/ui components
+│   │   ├── wallet/            ← WalletButton
+│   │   └── logo.tsx           ← Tanko logos
+│   │
+│   └── providers/
+│       ├── auth-provider.tsx       ← AuthContext (wallet + role)
+│       └── protected-route.tsx     ← Route protection HOC
 │
-└── backend/              ← Node.js / Express
-    └── src/
-        ├── index.ts           ← Express server entry point
-        ├── config/index.ts    ← env vars + constants
-        ├── routes/            ← API route definitions
-        ├── controllers/       ← business logic handlers
-        └── services/          ← Trustless Work API calls
-```
-
----
-
-## Data Flow
-
-```
-Browser (Next.js :3000)
-  │
-  │  1. User connects Freighter wallet → publicKey stored in context
-  │  2. "Create Escrow" button clicked
-  │
-  ▼
-Express API (:3001)
-  │  POST /api/v1/escrow/single/create
-  │  Authorization: Bearer <TRUSTLESS_WORK_API_KEY>
-  │
-  ▼
-Trustless Work API (dev.api.trustlesswork.com)
-  │  Returns unsigned XDR transaction
-  │
-  ▼ (future step — sign + submit)
-Stellar Horizon Testnet
-  └─ Escrow created on-chain
+├── backend/                  ← Express + TypeScript
+│   ├── prisma/
+│   │   ├── schema.prisma     ← Database schema
+│   │   ├── seed.ts          ← Seed data
+│   │   └── prisma.config.ts  ← Prisma configuration
+│   │
+│   └── src/
+│       ├── index.ts              ← Express app entry point
+│       ├── config/index.ts       ← Environment configuration
+│       ├── db/prisma.ts         ← Prisma client
+│       │
+│       ├── repositories/         ← Data access layer
+│       │   ├── user.repository.ts
+│       │   ├── unit.repository.ts
+│       │   ├── fuelLog.repository.ts
+│       │   ├── fundRequest.repository.ts
+│       │   ├── escrowConfig.repository.ts
+│       │   └── escrowMilestone.repository.ts
+│       │
+│       ├── services/              ← Business logic
+│       │   ├── escrow.service.ts
+│       │   ├── funds.service.ts
+│       │   ├── stats.service.ts
+│       │   ├── stellar.service.ts
+│       │   └── trustlessWork.service.ts
+│       │
+│       ├── controllers/           ← Request handlers
+│       │   ├── escrow.controller.ts
+│       │   ├── funds.controller.ts
+│       │   ├── stats.controller.ts
+│       │   ├── user.controller.ts
+│       │   ├── unit.controller.ts
+│       │   ├── fuelLog.controller.ts
+│       │   └── wallet.controller.ts
+│       │
+│       └── routes/               ← API routes
+│           ├── escrow.routes.ts
+│           ├── funds.routes.ts
+│           ├── stats.routes.ts
+│           ├── user.routes.ts
+│           ├── unit.routes.ts
+│           ├── fuelLog.routes.ts
+│           ├── config.routes.ts
+│           ├── wallet.routes.ts
+│           └── helper.routes.ts
+│
+└── contracts/                ← Soroban Smart Contracts
+    └── tanko-registry/
+        ├── Cargo.toml
+        └── src/lib.rs        ← TankoRegistry contract
 ```
 
 ---
@@ -121,14 +199,15 @@ Stellar Horizon Testnet
 ## Tech Stack
 
 | Layer | Technology |
-|---|---|
-| Frontend | Next.js 14, React 18, Tailwind CSS, shadcn/ui |
-| Blockchain auth | `@stellar/freighter-api` (browser extension) |
-| Charts | Recharts |
-| Backend | Node.js, Express, TypeScript |
-| Blockchain | Stellar (Testnet via Horizon) |
-| Escrow protocol | Trustless Work API |
-| Package manager | npm Workspaces |
+|-------|------------|
+| **Frontend** | Next.js 16, React 18, Tailwind CSS, shadcn/ui, Recharts |
+| **Blockchain Auth** | `@stellar/freighter-api` (browser extension) |
+| **Backend** | Node.js, Express, TypeScript, Prisma ORM |
+| **Database** | PostgreSQL |
+| **Blockchain** | Stellar (Testnet via Horizon + Soroban) |
+| **Escrow Protocol** | Trustless Work API |
+| **Smart Contracts** | Rust + Soroban SDK |
+| **Package Manager** | npm Workspaces |
 
 ---
 
@@ -138,85 +217,102 @@ Stellar Horizon Testnet
 
 - Node.js ≥ 18
 - npm ≥ 9
-- [Freighter wallet extension](https://freighter.app) installed in your browser and set to **Testnet**
+- PostgreSQL (local or managed)
+- [Freighter wallet extension](https://freighter.app) installed and set to **Testnet**
 
 ### Steps
 
 ```bash
 # 1. Clone the repository
 git clone <your-repo-url>
-cd Tanko_Workspace
+cd Tanko
 
-# 2. Install all dependencies (frontend + backend) in one command
+# 2. Install all dependencies
 npm install
 
 # 3. Configure environment variables
 cp .env.example .env
-#    → Fill in TRUSTLESS_WORK_API_KEY with your key from https://app.trustlesswork.com
+# Edit .env with your values
+
+# 4. Setup database (if using PostgreSQL)
+cd backend
+npx prisma generate
+npx prisma db push
+npx prisma db seed
+cd ..
 ```
 
 ---
 
 ## Environment Variables
 
-All variables live in a single `.env` at the **monorepo root**. Both `frontend` and `backend` read from it automatically.
-
-| Variable | Description | Example |
-|---|---|---|
-| `PORT` | Backend port | `3001` |
-| `NODE_ENV` | Runtime environment | `development` |
-| `TRUSTLESS_WORK_API_URL` | Trustless Work base URL | `https://dev.api.trustlesswork.com` |
-| `TRUSTLESS_WORK_API_KEY` | Your API key (get it at app.trustlesswork.com) | `QJ31ARp...` |
-| `STELLAR_NETWORK` | `testnet` or `public` | `testnet` |
-| `STELLAR_HORIZON_URL` | Stellar Horizon endpoint | `https://horizon-testnet.stellar.org` |
-| `CORS_ORIGIN` | Allowed CORS origins (comma-separated) | `http://localhost:3000` |
-| `NEXT_PUBLIC_BACKEND_URL` | Backend URL used in browser fetch calls | `http://127.0.0.1:3001` |
-| `NEXTAUTH_SECRET` | NextAuth secret (change in production) | `your-secret` |
-| `NEXTAUTH_URL` | NextAuth base URL | `http://localhost:3000` |
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `NODE_ENV` | Runtime environment | Yes |
+| `PORT` | Backend port | Yes |
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `STELLAR_NETWORK` | `testnet` or `public` | Yes |
+| `STELLAR_HORIZON_URL` | Stellar Horizon endpoint | Yes |
+| `TRUSTLESS_WORK_API_URL` | Trustless Work base URL | Yes |
+| `TRUSTLESS_WORK_API_KEY` | Trustless Work API key | Yes |
+| `SOROBAN_CONTRACT_ID` | Deployed tanko-registry contract ID | No |
+| `TANKO_ADMIN_SECRET` | Admin wallet secret (backend only) | Yes |
+| `CORS_ORIGIN` | Allowed CORS origins | Yes |
+| `NEXT_PUBLIC_BACKEND_URL` | Backend URL for frontend | Yes |
 
 ---
 
 ## Running the App
 
+### Development
+
 ```bash
-# From the monorepo root — starts both frontend (:3000) and backend (:3001)
+# Start both frontend and backend
 npm run dev
-```
 
-Individual commands:
-
-```bash
+# Or separately
 npm run dev:frontend   # Next.js on port 3000
 npm run dev:backend    # Express on port 3001
 ```
 
+### URLs
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:3001
+- Backend Health: http://localhost:3001/health
+
 ---
 
-## Usage Guide (Demo)
+## Usage Guide
 
-### 1. Connect your wallet
+### 1. Login Flow
 
-Open `http://localhost:3000`. Click **"Connect with Freighter"**. The browser extension popup will appear — approve the connection. You will be redirected to the dashboard.
+1. Open `http://localhost:3000`
+2. Click **"Connect with Freighter"**
+3. Approve connection in Freighter popup
+4. Select your role:
+   - **"Soy Conductor"** → Driver dashboard
+   - **"Soy Jefe de Flota"** → Fleet manager dashboard
 
-### 2. View the fleet overview
+### 2. Fleet Manager (Jefe) Flow
 
-The `/dashboard` page shows monthly fuel spend, liters loaded, and recent transactions (all mock data for the demo).
+1. **View Dashboard** → Overview with stats, charts, pending requests
+2. **Approve/Reject Requests** → Click approve/reject buttons on pending requests
+3. **Manage Users** → View drivers in `/dashboard/usuarios`
+4. **Manage Fleet** → View vehicles in `/dashboard/unidades`
+5. **View Fuel Logs** → Transaction history in `/dashboard/consumos`
+6. **View Locations** → Gas stations in `/dashboard/ubicaciones`
 
-### 3. Create an Escrow (Fleet Manager flow)
+### 3. Driver (Conductor) Flow
 
-1. Navigate to **Fuel Logs** in the sidebar.
-2. Your connected wallet address appears in a green banner at the top.
-3. Click **"Create Escrow (Trustless Work)"**.
-4. The button calls `POST /api/v1/escrow/single/create` on the backend.
-5. The backend forwards the request to the Trustless Work API, which returns an unsigned XDR transaction.
-6. The JSON response (success or error) is displayed in a toast notification.
+1. **View Wallet** → Balance, escrow limit, used amount
+2. **Request Funds** → Enter liters → Auto-calculate amount → Submit
+3. **View History** → Recent fund requests with status
 
-### 4. Request fuel funds (Driver flow)
+### 4. Switching Roles
 
-1. Navigate to **Driver** in the sidebar.
-2. Enter the number of liters needed in the form.
-3. The calculated USD amount is shown automatically.
-4. Click **"Request funds"** to fire the same escrow-creation endpoint with the driver's payload.
+- Click **"Ver como [otro rol]"** in the sidebar to switch views
+- Each role has restricted access to routes
 
 ---
 
@@ -224,39 +320,122 @@ The `/dashboard` page shows monthly fuel spend, liters loaded, and recent transa
 
 All endpoints are prefixed with `/api/v1`.
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/escrow/single/create` | Create a single-milestone escrow via Trustless Work |
-| `POST` | `/escrow/approve` | Approve and release escrow funds |
-| `GET`  | `/escrow/:id` | Get escrow details by ID |
-| `POST` | `/wallet/connect` | Log a wallet connection event |
+### Escrow
 
-The backend proxies requests to `https://dev.api.trustlesswork.com` and attaches the `Authorization: Bearer <API_KEY>` header automatically.
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/escrow/:id` | Get escrow details |
+| `POST` | `/escrow/single/create` | Create single-milestone escrow |
+| `POST` | `/escrow/multi/create` | Create multi-milestone escrow |
+
+### Funds
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/funds/request` | Create fund request (driver) |
+| `GET` | `/funds/driver/:address` | Get driver's fund requests |
+| `GET` | `/funds/manager/:address/pending` | Get pending requests for manager |
+| `POST` | `/trustless/solicitud/approve` | Approve fund request |
+| `POST` | `/trustless/solicitud/reject` | Reject fund request |
+
+### Stats
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/stats/dashboard` | Dashboard statistics |
+| `GET` | `/stats/monthly` | Monthly statistics |
+| `GET` | `/stats/consumption-by-driver` | Consumption by driver |
+| `GET` | `/stats/top-units` | Top consuming units |
+| `GET` | `/stats/recent-transactions` | Recent transactions |
+| `GET` | `/driver/:address/stats` | Driver-specific stats |
+
+### Users & Units
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/users` | List all users |
+| `GET` | `/users/stellar/:address` | Get user by Stellar address |
+| `GET` | `/units` | List all units |
+| `GET` | `/fuel-logs` | List all fuel logs |
+| `GET` | `/config/escrow` | Get escrow configuration |
 
 ---
 
-## File Structure
+## Smart Contract
 
+### Tanko Registry (Soroban)
+
+The `tanko-registry` contract manages driver and gas station whitelists.
+
+#### Contract Functions
+
+| Function | Description |
+|----------|-------------|
+| `init(admin)` | Initialize contract with admin address |
+| `add_driver(admin, driver)` | Add driver to whitelist |
+| `add_station(admin, station)` | Add gas station to whitelist |
+| `verify_tx(driver, station)` | Verify both are registered |
+| `get_driver_stats(driver)` | Get driver's escrow config |
+| `update_driver_limit(admin, driver, limit)` | Update driver's escrow limit |
+| `record_usage(admin, driver, amount)` | Record fuel usage |
+| `reset_driver_usage(admin, driver)` | Reset driver's usage |
+
+#### DriverConfig Structure
+
+```rust
+struct DriverConfig {
+    escrow_limit: i128,      // Maximum escrow amount (stroops)
+    escrow_used: i128,        // Currently used amount
+    escrow_available: i128,   // Available = limit - used
+    is_active: bool,         // Driver active status
+    registered_at: u64,       // Registration timestamp
+}
 ```
-backend/src/
-├── index.ts              ← Express app, CORS, port binding
-├── config/index.ts       ← Reads .env, exports typed config
-├── routes/
-│   ├── escrow.routes.ts
-│   └── wallet.routes.ts
-├── controllers/
-│   ├── escrow.controller.ts
-│   └── wallet.controller.ts
-└── services/
-    └── trustlesswork.service.ts
-```
+
+---
+
+## Current Status
+
+### ✅ Completed
+
+- [x] Authentication with wallet (Freighter)
+- [x] Role selection (Conductor / Jefe)
+- [x] Protected routes by role
+- [x] Fleet Manager Dashboard with stats
+- [x] Pending requests approval flow
+- [x] Driver wallet page
+- [x] Fund request creation
+- [x] Fuel logs, users, units, locations pages
+- [x] Backend API with Prisma
+- [x] Escrow services (Trustless Work)
+- [x] Soroban contract skeleton
+- [x] Database schema
+
+### ⚠️ In Progress
+
+- [ ] PostgreSQL database setup
+- [ ] Trustless Work API integration testing
+- [ ] Soroban contract deployment
+- [ ] Soroban service in backend
+
+### ❌ Pending
+
+- [ ] Production environment variables
+- [ ] E2E testing
+- [ ] Deployment configuration
 
 ---
 
 ## Demo Notes
 
-- **All frontend data is mocked** — no real database is used. The escrow API calls are real (Stellar Testnet).
-- Freighter must be set to **Testnet** in the extension settings, otherwise the wallet address will be on the wrong network.
-- The `engagementId` is generated as `TANKO-<timestamp>` on every button click, so each escrow attempt creates a unique escrow.
-- The `amount` field sent to Trustless Work is `"1"` (1 USDC testnet) for safe testing.
-- To get testnet USDC, use the [Stellar Laboratory](https://laboratory.stellar.org) to fund your testnet account.
+- **Database**: Currently requires PostgreSQL connection for full functionality
+- **Trustless Work**: API key required for real escrow operations
+- **Soroban**: Contract needs to be deployed and contract ID configured
+- **Freighter**: Must be set to **Testnet** in extension settings
+- **Testnet Funds**: Use [Stellar Laboratory](https://laboratory.stellar.org) to fund testnet accounts
+
+---
+
+## License
+
+MIT - Hack+ Alebrije CDMX 2026

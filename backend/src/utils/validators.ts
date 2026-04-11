@@ -2,39 +2,42 @@ import { z } from 'zod';
 
 export const trustlineSchema = z.object({
   address: z.string().min(1, 'Trustline address is required'),
-  symbol: z.string().min(1, 'Trustline symbol is required'),
+  decimals: z.number().int().positive().optional().default(7),
+  symbol: z.string().optional(),
 });
 
 export const milestoneSchema = z.object({
+  title: z.string().optional(),
   description: z.string().min(1, 'Milestone description is required'),
   amount: z.number().positive('Milestone amount must be positive'),
 });
 
 export const rolesSchema = z.object({
-  sender:          z.string().min(1, 'sender address is required'),
+  sender: z.string().min(1, 'sender address is required'),
   serviceProvider: z.string().min(1, 'serviceProvider address is required'),
   platformAddress: z.string().min(1, 'platformAddress is required'),
-  releaseSigner:   z.string().min(1, 'releaseSigner address is required'),
+  releaseSigner: z.string().min(1, 'releaseSigner address is required'),
   disputeResolver: z.string().min(1, 'disputeResolver address is required'),
+  approver: z.string().optional(),
+  receiver: z.string().optional(),
 });
 
 export const createEscrowSchema = z.object({
-  signer:       z.string().min(1, 'Signer address is required'),
+  signer: z.string().min(1, 'Signer address is required'),
   engagementId: z.string().min(1, 'Engagement ID is required'),
-  title:        z.string().min(1, 'Title is required'),
-  roles:        rolesSchema,
-  amount:       z.number().positive('Amount must be positive'),
-  platformFee:  z.number().min(0, 'Platform fee must be >= 0'),
-  milestones:   z.array(milestoneSchema).min(1, 'At least one milestone is required'),
-  trustline:    trustlineSchema,
+  title: z.string().optional(),
+  description: z.string().optional(),
+  roles: rolesSchema,
+  amount: z.number().positive('Amount must be positive'),
+  platformFee: z.number().min(0).optional().default(0),
+  milestones: z.array(milestoneSchema).optional().default([]),
+  trustline: trustlineSchema,
 });
 
 export const fundEscrowSchema = z.object({
   contractId: z.string().min(1, 'Contract ID is required'),
-  signer: z.string().min(1, 'Signer is required'),
-  role: z.enum(['serviceProvider', 'platformAddress', 'releaseSigner', 'disputeResolver']),
+  xdr: z.string().min(1, 'XDR is required'),
   rolePublicKey: z.string().min(1, 'Role public key is required'),
-  trustline: trustlineSchema,
 });
 
 export const approveMilestoneSchema = z.object({
@@ -62,11 +65,14 @@ export const getEscrowSchema = z.object({
 export const setTrustlineSchema = z.object({
   address: z.string().min(1, 'Address is required'),
   publicKey: z.string().min(1, 'Public key is required'),
-  trustline: trustlineSchema,
+  trustline: z.object({
+    address: z.string().min(1),
+    decimals: z.number().int().positive().optional().default(7),
+  }),
 });
 
 export const getEscrowsByRoleSchema = z.object({
-  role: z.enum(['serviceProvider', 'platformAddress', 'releaseSigner', 'disputeResolver']),
+  role: z.string().min(1, 'Role is required'),
   publicKey: z.string().min(1, 'Public key is required'),
 });
 

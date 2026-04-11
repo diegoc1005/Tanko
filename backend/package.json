@@ -11,9 +11,20 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:prod": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.7.0",
+    "@prisma/client": "^7.7.0",
     "axios": "^1.6.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
@@ -21,6 +32,8 @@
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
+    "pg": "^8.20.0",
+    "prisma": "^7.7.0",
     "stellar-sdk": "^12.0.0",
     "uuid": "^9.0.1",
     "zod": "^3.22.4"
@@ -31,6 +44,7 @@
     "@types/jest": "^30.0.0",
     "@types/morgan": "^1.9.9",
     "@types/node": "^20.11.16",
+    "@types/pg": "^8.20.0",
     "@types/supertest": "^7.2.0",
     "@types/uuid": "^9.0.8",
     "jest": "^30.3.0",

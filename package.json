@@ -1,5 +1,5 @@
 {
-  "name": "tanko-monorepo",
+  "name": "tanko",
   "version": "1.0.0",
   "description": "Tanko – Sistema B2B de gestión descentralizada de combustible con Trustless Work / Stellar",
   "private": true,

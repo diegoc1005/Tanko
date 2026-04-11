@@ -7,6 +7,11 @@ import escrowRoutes from './routes/escrow.routes.js';
 import walletRoutes from './routes/wallet.routes.js';
 import helperRoutes from './routes/helper.routes.js';
 import fundsRoutes from './routes/funds.routes.js';
+import statsRoutes from './routes/stats.routes.js';
+import userRoutes from './routes/user.routes.js';
+import unitRoutes from './routes/unit.routes.js';
+import fuelLogRoutes from './routes/fuelLog.routes.js';
+import configRoutes from './routes/config.routes.js';
 
 const app = express();
 
@@ -34,6 +39,11 @@ app.get('/health', (req: Request, res: Response) => {
 app.use('/api/v1', escrowRoutes);
 app.use('/api/v1', walletRoutes);
 app.use('/api/v1', fundsRoutes);
+app.use('/api/v1', statsRoutes);
+app.use('/api/v1', userRoutes);
+app.use('/api/v1', unitRoutes);
+app.use('/api/v1', fuelLogRoutes);
+app.use('/api/v1', configRoutes);
 app.use('/api/v1/helper', helperRoutes);
 
 app.use((req: Request, res: Response) => {
@@ -54,7 +64,7 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 app.listen(config.port, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
-║                    TANKO-scrow Backend                        ║
+║                    TANKO-scrow Backend                    ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  Status:     RUNNING                                          ║
 ║  Port:       ${String(config.port).padEnd(48)}║

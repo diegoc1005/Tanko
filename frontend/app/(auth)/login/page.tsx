@@ -1,63 +1,129 @@
 'use client'
 
-import { useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Fuel, Loader2, Wallet } from 'lucide-react'
+import { Loader2, Wallet, User, Users } from 'lucide-react'
+import { useAuth, UserRole } from '@/providers/auth-provider'
+import { TankoLogoMinimal } from '@/components/logo'
 
 export default function LoginPage() {
   const router = useRouter()
+  const { address, isConnected, isConnecting, connect, disconnect, setRole, role } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [mode, setMode] = useState<'credentials' | 'wallet'>('credentials')
 
-  const [credentials, setCredentials] = useState({
-    email: '',
-    password: '',
-  })
+  useEffect(() => {
+    if (isConnected && address && role) {
+      if (role === 'CONDUCTOR') {
+        router.push('/dashboard/conductor')
+      } else {
+        router.push('/dashboard')
+      }
+    }
+  }, [isConnected, address, role, router])
 
-  const handleCredentialsLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleWalletConnect = async () => {
     setIsLoading(true)
     setError('')
 
     try {
-      const result = await signIn('credentials', {
-        email: credentials.email,
-        password: credentials.password,
-        redirect: false,
-      })
-
-      if (result?.error) {
-        setError('Credenciales incorrectas')
-      } else {
-        router.push('/dashboard')
-      }
+      await connect()
     } catch (err) {
-      setError('Error al iniciar sesión')
+      setError('Error al conectar wallet. Asegúrate de tener Freighter instalado.')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleWalletLogin = async () => {
-    setIsLoading(true)
-    setError('')
-
-    // Simulated wallet login - in production, use Freighter
-    try {
-      // Here you would connect to Freighter and get the address
-      // For now, simulate the flow
-      setError('Conecta tu wallet Freighter para continuar')
-    } catch (err) {
-      setError('Error al conectar wallet')
-    } finally {
-      setIsLoading(false)
+  const handleRoleSelect = (selectedRole: UserRole) => {
+    setRole(selectedRole)
+    
+    if (selectedRole === 'CONDUCTOR') {
+      router.push('/dashboard/conductor')
+    } else {
+      router.push('/dashboard')
     }
+  }
+
+  if (isConnecting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+            <p className="text-muted-foreground">Conectando con Freighter...</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (isConnected && address && !role) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="w-full max-w-lg">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
+                <TankoLogoMinimal size={28} className="text-primary-foreground" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl">Bienvenido a Tanko</CardTitle>
+            <CardDescription>
+              Conecta tu wallet: {address.slice(0, 8)}...{address.slice(-8)}
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent className="space-y-6">
+            <p className="text-sm text-muted-foreground text-center">
+              ¿Cómo deseas acceder?
+            </p>
+
+            <div className="grid gap-4">
+              <button
+                onClick={() => handleRoleSelect('CONDUCTOR')}
+                className="flex items-center gap-4 p-4 rounded-lg border-2 border-border hover:border-blue-500/50 hover:bg-blue-500/5 transition-all text-left"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-500/10">
+                  <User className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-foreground">Soy Conductor</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Solicitar fondos de combustible y cargar combustible
+                  </p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleRoleSelect('JEFE')}
+                className="flex items-center gap-4 p-4 rounded-lg border-2 border-border hover:border-violet-500/50 hover:bg-violet-500/5 transition-all text-left"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-violet-500/10">
+                  <Users className="h-6 w-6 text-violet-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-foreground">Soy Jefe de Flota</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Gestionar conductores, aprobar solicitudes y supervisar la flota
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            <Button
+              variant="ghost"
+              onClick={disconnect}
+              className="w-full text-muted-foreground"
+            >
+              Desconectar wallet
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -66,116 +132,54 @@ export default function LoginPage() {
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-              <Fuel className="h-6 w-6 text-primary-foreground" />
+              <TankoLogoMinimal size={28} className="text-primary-foreground" />
             </div>
           </div>
           <CardTitle className="text-2xl">Tanko</CardTitle>
           <CardDescription>
-            Monedero electrónico para combustible
+            Monedero electrónico descentralizado para combustible
           </CardDescription>
         </CardHeader>
         
-        <CardContent>
-          {/* Mode Toggle */}
-          <div className="flex rounded-lg bg-muted p-1 mb-6">
-            <button
-              onClick={() => setMode('credentials')}
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                mode === 'credentials'
-                  ? 'bg-background shadow-sm'
-                  : 'text-muted-foreground'
-              }`}
-            >
-              Email
-            </button>
-            <button
-              onClick={() => setMode('wallet')}
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                mode === 'wallet'
-                  ? 'bg-background shadow-sm'
-                  : 'text-muted-foreground'
-              }`}
-            >
-              Wallet
-            </button>
-          </div>
-
+        <CardContent className="space-y-4">
           {error && (
             <div className="mb-4 p-3 text-sm text-destructive bg-destructive/10 rounded-lg">
               {error}
             </div>
           )}
 
-          {mode === 'credentials' ? (
-            <form onSubmit={handleCredentialsLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@transportesnorte.com"
-                  value={credentials.email}
-                  onChange={(e) =>
-                    setCredentials({ ...credentials, email: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Contraseña</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={credentials.password}
-                  onChange={(e) =>
-                    setCredentials({ ...credentials, password: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Iniciando sesión...
-                  </>
-                ) : (
-                  'Iniciar Sesión'
-                )}
-              </Button>
-            </form>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground text-center">
-                Conecta tu wallet Freighter para iniciar sesión
-              </p>
-              <Button
-                onClick={handleWalletLogin}
-                className="w-full"
-                disabled={isLoading}
-                variant="outline"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Conectando...
-                  </>
-                ) : (
-                  <>
-                    <Wallet className="mr-2 h-4 w-4" />
-                    Conectar con Freighter
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground text-center">
+              Conecta tu wallet Freighter para comenzar
+            </p>
+            
+            <Button
+              onClick={handleWalletConnect}
+              className="w-full"
+              disabled={isLoading}
+              size="lg"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Conectando...
+                </>
+              ) : (
+                <>
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Conectar con Freighter
+                </>
+              )}
+            </Button>
+          </div>
 
-          <div className="mt-6 text-center text-xs text-muted-foreground">
-            ¿No tienes cuenta?{' '}
-            <a href="/register" className="underline underline-offset-4 hover:text-primary">
-              Regístrate
-            </a>
+          <div className="mt-6 p-4 rounded-lg bg-muted/50">
+            <h4 className="text-sm font-medium mb-2">Acerca de Freighter</h4>
+            <p className="text-xs text-muted-foreground">
+              Freighter es una wallet de Stellar que te permite interactuar con 
+              aplicaciones descentralizadas. Necesitarás crear una cuenta en 
+              Stellar Testnet para usar esta aplicación.
+            </p>
           </div>
         </CardContent>
       </Card>

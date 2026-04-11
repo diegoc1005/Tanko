@@ -11,7 +11,11 @@ import {
   Milestone,
 } from '../types/index.js';
 
-interface TrustlessWorkResponse<T> {
+export interface MultiReleaseEscrowPayload extends CreateEscrowPayload {
+  milestones: Omit<Milestone, 'status'>[];
+}
+
+export interface TrustlessWorkResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
@@ -46,7 +50,7 @@ export class TrustlessWorkService {
   }
 
   async createMultiReleaseEscrow(
-    payload: CreateEscrowPayload & { milestones: Omit<Milestone, 'status'>[] }
+    payload: MultiReleaseEscrowPayload
   ): Promise<TrustlessWorkResponse<EscrowResponse>> {
     try {
       const response = await this.client.post('/deployer/multi-release', payload);
@@ -184,6 +188,7 @@ export class TrustlessWorkService {
       return this.handleError(error);
     }
   }
+
   async getEscrowsByRole(
     role: string,
     publicKey: string

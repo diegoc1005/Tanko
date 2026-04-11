@@ -17,7 +17,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useWallet } from '@/providers/wallet-provider'
+import { useAuth } from '@/providers/auth-provider'
 
 const FEATURES = [
   {
@@ -82,10 +82,16 @@ const HOW_IT_WORKS = [
 ]
 
 export default function MenuPage() {
-  const { isConnected } = useWallet() as any
+  const { isConnected, role } = useAuth()
   const router = useRouter()
 
-  const handleCTA = () => router.push(isConnected ? '/dashboard' : '/')
+  const handleCTA = () => {
+    if (isConnected && role) {
+      router.push(role === 'CONDUCTOR' ? '/dashboard/conductor' : '/dashboard')
+    } else {
+      router.push('/login')
+    }
+  }
 
   return (
     <div

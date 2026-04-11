@@ -3,10 +3,10 @@
 import { useRouter } from 'next/navigation'
 import { Fuel, Wallet, CheckCircle2, Loader2, ExternalLink, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useWallet } from '@/providers/wallet-provider'
+import { useAuth } from '@/providers/auth-provider'
 
 export default function HomePage() {
-  const { isConnected, isConnecting, address, error, freighterInstalled, connect, disconnect } = useWallet() as any
+  const { isConnected, isConnecting, address, error, connect, disconnect } = useAuth()
   const router = useRouter()
 
   return (

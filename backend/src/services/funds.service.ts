@@ -1,83 +1,104 @@
 import {
-  FundRequest,
-  FundRequestPayload,
-  ApproveFundRequestPayload,
-  RejectFundRequestPayload,
   CreateEscrowPayload,
   EscrowResponse,
   TestnetAccount,
 } from '../types/index.js';
 import { trustlessWorkService } from './trustlessWork.service.js';
 import { stellarService } from './stellar.service.js';
-import { fundRequestStore } from './funds.store.js';
+import { fundRequestRepository } from '../repositories/fundRequest.repository.js';
+import { escrowConfigRepository } from '../repositories/escrowConfig.repository.js';
+import { escrowMilestoneRepository } from '../repositories/escrowMilestone.repository.js';
 import axios from 'axios';
 
+export interface CreateFundRequestInput {
+  driverPubKey: string;
+  managerPubKey: string;
+  liters: number;
+  amount: number;
+  description?: string;
+}
+
+export interface ApproveFundRequestInput {
+  requestId: string;
+  managerSecret: string;
+}
+
+export interface ReleaseFundsInput {
+  requestId: string;
+  managerSecret: string;
+  managerPubKey: string;
+}
+
+export interface RejectFundRequestInput {
+  requestId: string;
+}
+
 export class FundsService {
-  async createRequest(
-    driverPublicKey: string,
-    payload: FundRequestPayload,
-    managerPublicKey: string
-  ): Promise<{ success: boolean; data?: FundRequest; error?: string }> {
-    if (!stellarService.validatePublicKey(driverPublicKey)) {
+  async createRequest(input: CreateFundRequestInput) {
+    if (!stellarService.validatePublicKey(input.driverPubKey)) {
       return { success: false, error: 'Invalid driver public key' };
     }
 
-    if (!stellarService.validatePublicKey(managerPublicKey)) {
+    if (!stellarService.validatePublicKey(input.managerPubKey)) {
       return { success: false, error: 'Invalid manager public key' };
     }
 
-    const amount = BigInt(payload.amount);
-    if (amount <= BigInt(0)) {
+    if (input.amount <= 0) {
       return { success: false, error: 'Amount must be positive' };
     }
 
-    const request = fundRequestStore.create({
-      driverPublicKey,
-      managerPublicKey,
-      amount: payload.amount,
-      description: payload.description,
+    const request = await fundRequestRepository.create({
+      driverPubKey: input.driverPubKey,
+      managerPubKey: input.managerPubKey,
+      liters: input.liters,
+      amount: input.amount,
+      description: input.description,
     });
 
     return { success: true, data: request };
   }
 
-  async approveRequest(
-    payload: ApproveFundRequestPayload,
-    managerPublicKey: string
-  ): Promise<{ success: boolean; data?: FundRequest; error?: string }> {
-    if (!stellarService.validateSecretKey(payload.managerSecret)) {
+  async approveRequest(input: ApproveFundRequestInput, managerPubKey: string) {
+    if (!stellarService.validateSecretKey(input.managerSecret)) {
       return { success: false, error: 'Invalid secret key' };
     }
 
-    const request = fundRequestStore.getById(payload.requestId);
+    const request = await fundRequestRepository.findById(input.requestId);
     if (!request) {
       return { success: false, error: 'Request not found' };
     }
 
-    if (request.status !== 'pending') {
+    if (request.status !== 'PENDING') {
       return { success: false, error: `Request is already ${request.status}` };
     }
 
-    if (request.managerPublicKey !== managerPublicKey) {
+    if (request.managerPubKey !== managerPubKey) {
       return { success: false, error: 'Only the assigned manager can approve this request' };
     }
 
-    const usdcTrustline = {
-      address: 'CBIELTK6YBZJU5UP2WWQAUYO4SJ2HBMQEFMU7HHD32YBXE7MKU65XABZ',
-      decimals: 10000000,
+    const escrowConfig = await escrowConfigRepository.getDefault();
+    const trustline = {
+      address: escrowConfig.usdcAddress,
+      decimals: escrowConfig.decimals,
     };
 
     const escrowPayload: CreateEscrowPayload = {
-      signer: managerPublicKey,
-      engagementId: `FUND-REQ-${request.id.substring(0, 8)}`,
+      signer: managerPubKey,
+      engagementId: `FUND-${request.id.substring(0, 8).toUpperCase()}`,
+      title: `Fuel Request - ${request.liters}L`,
+      description: request.description || `Fuel request for ${request.liters} liters`,
       roles: {
-        sender: managerPublicKey,
-        approver: managerPublicKey,
-        receiver: request.driverPublicKey,
+        sender: managerPubKey,
+        serviceProvider: managerPubKey,
+        platformAddress: managerPubKey,
+        releaseSigner: managerPubKey,
+        disputeResolver: managerPubKey,
+        approver: managerPubKey,
+        receiver: request.driverPubKey,
       },
       amount: request.amount,
-      description: request.description,
-      trustline: usdcTrustline,
+      platformFee: escrowConfig.platformFee,
+      trustline,
     };
 
     const escrowResult = await trustlessWorkService.createSingleReleaseEscrow(escrowPayload);
@@ -87,39 +108,47 @@ export class FundsService {
     }
 
     const signedXdr = stellarService.signTransaction(
-      escrowResult.data.xdr,
-      payload.managerSecret
+      escrowResult.data.xdr || '',
+      input.managerSecret
     );
 
     const submitResult = await stellarService.submitTransaction(signedXdr);
 
-    fundRequestStore.update(request.id, {
-      status: 'approved',
+    await fundRequestRepository.update(request.id, {
+      status: 'APPROVED',
       contractId: escrowResult.data.contractId,
       escrowXdr: signedXdr,
+      escrowTxHash: submitResult.hash,
+    });
+
+    const escrowContractId = escrowResult.data.contractId || `fund-${Date.now()}`;
+    await escrowMilestoneRepository.create({
+      escrowId: escrowContractId,
+      contractId: escrowContractId,
+      engagementId: escrowPayload.engagementId,
+      title: escrowPayload.title || `Fuel Request`,
+      description: escrowPayload.description || `Fuel request`,
+      amount: request.amount,
+      status: 'APPROVED',
     });
 
     return {
       success: true,
-      data: fundRequestStore.getById(request.id),
+      data: await fundRequestRepository.findById(request.id),
     };
   }
 
-  async releaseFunds(
-    requestId: string,
-    managerSecret: string,
-    managerPublicKey: string
-  ): Promise<{ success: boolean; txHash?: string; error?: string }> {
-    if (!stellarService.validateSecretKey(managerSecret)) {
+  async releaseFunds(input: ReleaseFundsInput) {
+    if (!stellarService.validateSecretKey(input.managerSecret)) {
       return { success: false, error: 'Invalid secret key' };
     }
 
-    const request = fundRequestStore.getById(requestId);
+    const request = await fundRequestRepository.findById(input.requestId);
     if (!request) {
       return { success: false, error: 'Request not found' };
     }
 
-    if (request.status !== 'approved') {
+    if (request.status !== 'APPROVED') {
       return { success: false, error: 'Request must be approved before releasing funds' };
     }
 
@@ -137,15 +166,11 @@ export class FundsService {
       return { success: false, error: 'Funds already released' };
     }
 
-    if (escrowStatus.data.status !== 'funded' && escrowStatus.data.status !== 'initialized') {
-      return { success: false, error: `Cannot release funds in status: ${escrowStatus.data.status}` };
-    }
-
     const approveResult = await trustlessWorkService.approveMilestone({
       contractId: request.contractId,
       milestoneIndex: 0,
-      signer: managerPublicKey,
-      rolePublicKey: managerPublicKey,
+      signer: input.managerPubKey,
+      rolePublicKey: input.managerPubKey,
     });
 
     if (!approveResult.success || !approveResult.data) {
@@ -154,14 +179,14 @@ export class FundsService {
 
     const signedApproveXdr = stellarService.signTransaction(
       approveResult.data.xdr,
-      managerSecret
+      input.managerSecret
     );
     await stellarService.submitTransaction(signedApproveXdr);
 
     const releaseResult = await trustlessWorkService.releaseFunds({
       contractId: request.contractId,
-      signer: managerPublicKey,
-      rolePublicKey: managerPublicKey,
+      signer: input.managerPubKey,
+      rolePublicKey: input.managerPubKey,
     });
 
     if (!releaseResult.success || !releaseResult.data) {
@@ -170,57 +195,78 @@ export class FundsService {
 
     const signedReleaseXdr = stellarService.signTransaction(
       releaseResult.data.xdr,
-      managerSecret
+      input.managerSecret
     );
     const txResult = await stellarService.submitTransaction(signedReleaseXdr);
 
-    fundRequestStore.update(request.id, { status: 'released' });
+    await fundRequestRepository.update(request.id, { status: 'RELEASED' });
+
+    const milestone = await escrowMilestoneRepository.findByContractId(request.contractId);
+    if (milestone) {
+      await escrowMilestoneRepository.update(milestone.id, {
+        status: 'RELEASED',
+        releasedAt: new Date(),
+      });
+    }
 
     return { success: true, txHash: txResult.hash };
   }
 
-  rejectRequest(
-    payload: RejectFundRequestPayload,
-    managerPublicKey: string
-  ): { success: boolean; data?: FundRequest; error?: string } {
-    const request = fundRequestStore.getById(payload.requestId);
+  rejectRequest(input: RejectFundRequestInput, managerPubKey: string) {
+    return this.rejectRequestInternal(input, managerPubKey);
+  }
+
+  private async rejectRequestInternal(input: RejectFundRequestInput, managerPubKey: string) {
+    const request = await fundRequestRepository.findById(input.requestId);
     if (!request) {
       return { success: false, error: 'Request not found' };
     }
 
-    if (request.status !== 'pending') {
+    if (request.status !== 'PENDING') {
       return { success: false, error: `Cannot reject request with status: ${request.status}` };
     }
 
-    if (request.managerPublicKey !== managerPublicKey) {
+    if (request.managerPubKey !== managerPubKey) {
       return { success: false, error: 'Only the assigned manager can reject this request' };
     }
 
-    fundRequestStore.update(request.id, {
-      status: 'rejected',
+    await fundRequestRepository.update(request.id, {
+      status: 'REJECTED',
     });
 
     return {
       success: true,
-      data: fundRequestStore.getById(request.id),
+      data: await fundRequestRepository.findById(request.id),
     };
   }
 
-  getRequest(id: string): { success: boolean; data?: FundRequest; error?: string } {
-    const request = fundRequestStore.getById(id);
+  getRequest(id: string) {
+    return this.getRequestInternal(id);
+  }
+
+  private async getRequestInternal(id: string) {
+    const request = await fundRequestRepository.findById(id);
     if (!request) {
       return { success: false, error: 'Request not found' };
     }
     return { success: true, data: request };
   }
 
-  getPendingRequests(managerPublicKey: string): { success: boolean; data?: FundRequest[] } {
-    const requests = fundRequestStore.getPendingByManager(managerPublicKey);
+  getPendingRequests(managerPubKey: string) {
+    return this.getPendingRequestsInternal(managerPubKey);
+  }
+
+  private async getPendingRequestsInternal(managerPubKey: string) {
+    const requests = await fundRequestRepository.findPendingByManager(managerPubKey);
     return { success: true, data: requests };
   }
 
-  getRequestsByDriver(driverPublicKey: string): { success: boolean; data?: FundRequest[] } {
-    const requests = fundRequestStore.getByDriver(driverPublicKey);
+  getRequestsByDriver(driverPubKey: string) {
+    return this.getRequestsByDriverInternal(driverPubKey);
+  }
+
+  private async getRequestsByDriverInternal(driverPubKey: string) {
+    const requests = await fundRequestRepository.findByDriverPubKey(driverPubKey);
     return { success: true, data: requests };
   }
 
@@ -261,11 +307,7 @@ export class FundsService {
     }
   }
 
-  async getEscrowStatus(contractId: string): Promise<{
-    success: boolean;
-    data?: { contractId: string; status: string; balance: string };
-    error?: string;
-  }> {
+  async getEscrowStatus(contractId: string) {
     const result = await trustlessWorkService.getEscrow(contractId);
 
     if (!result.success || !result.data) {
@@ -280,6 +322,16 @@ export class FundsService {
         balance: result.data.amount,
       },
     };
+  }
+
+  async getEscrowConfig() {
+    const config = await escrowConfigRepository.getDefault();
+    return { success: true, data: config };
+  }
+
+  async updateEscrowConfig(data: { usdcAddress?: string; decimals?: number; platformFee?: number }) {
+    const config = await escrowConfigRepository.update('default', data);
+    return { success: true, data: config };
   }
 }
 

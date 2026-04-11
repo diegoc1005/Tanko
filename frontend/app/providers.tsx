@@ -1,12 +1,12 @@
 'use client'
 
-import { WalletProvider } from '@/providers/wallet-provider'
+import { AuthProvider } from '@/providers/auth-provider'
 import { ReactNode } from 'react'
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <WalletProvider>
+    <AuthProvider>
       {children}
-    </WalletProvider>
+    </AuthProvider>
   )
 }

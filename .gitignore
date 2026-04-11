@@ -46,3 +46,4 @@ frontend/app/generated/
 # ─── Misc ─────────────────────────────────────────────────────────────────────
 *.http
 *.tsbuildinfo
+contracts/tanko-registry/target/
